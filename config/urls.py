@@ -20,4 +20,5 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('catalog.urls')),  # all other URLs go to catalog/urls.py
+    path('', include('orders.urls')),   # orders API
 ]

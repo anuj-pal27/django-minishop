@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import Category, Product
-from .serializers import CategorySerializer, ProductSerializer, RestockSerializer
+from .serializers import CategorySerializer, ProductListSerializer, ProductSerializer, RestockSerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):         # ModelViewSet = list+create+get+update+delete
     queryset = Category.objects.all()
@@ -16,6 +16,11 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(is_active=True).select_related("category")
     serializer_class = ProductSerializer
     lookup_field = "slug"
+
+    def get_serializer_class(self):                   # pick a serializer per action
+        if self.action == "list":                     # GET /products/ -> short version
+            return ProductListSerializer
+        return ProductSerializer                      # everything else -> full version
 
     # ----- custom action on ONE product: POST /products/<slug>/restock/ -----
     @action(detail=True, methods=["post"])            # detail=True → needs a slug in the URL

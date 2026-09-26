@@ -31,6 +31,13 @@ class ProductManualSerializer(serializers.Serializer):
 
 # ---------- 2) ModelSerializer: reads the model and writes the fields for you ----------
 
+# ---------- Category (moved up: other serializers use it) ----------
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name", "slug", "description"]         # name + slug get unique checks automatically
+
 BANNED_WORDS = ["fake", "replica"]
 
 
@@ -41,12 +48,28 @@ def no_banned_words(value):                               # reusable validator (
     # no return needed: no error = valid
 
 
+class ProductListSerializer(serializers.ModelSerializer):    # short version for the list page
+    category_name = serializers.CharField(source="category.name", read_only=True)  # go into category -> name
+    in_stock = serializers.SerializerMethodField()        # value comes from get_in_stock()
+
+    class Meta:
+        model = Product
+        fields = ["id", "name", "slug", "price", "category_name", "in_stock"]
+
+    def get_in_stock(self, obj):                          # name MUST be get_<field name>
+        return obj.stock > 0                              # obj = one product
+
+
 class ProductSerializer(serializers.ModelSerializer):
-    category = serializers.SlugRelatedField(slug_field="slug", queryset=Category.objects.all())
+    category = serializers.SlugRelatedField(
+        slug_field="slug", queryset=Category.objects.all(),
+        write_only=True,                                  # accepted IN ("shoes"), not sent OUT
+    )
+    category_detail = CategorySerializer(source="category", read_only=True)  # whole category sent OUT
 
     class Meta:
         model = Product                                   # read fields from this model
-        fields = ["id", "name", "slug", "price", "stock", "category"]
+        fields = ["id", "name", "slug", "price", "stock", "category", "category_detail"]
         extra_kwargs = {
             "price": {"min_value": Decimal("0.01")},      # extra rule the model doesn't have
             "name": {"validators": [no_banned_words]},    # attach the reusable validator to "name"
@@ -74,13 +97,6 @@ class ProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"price": "Electronics must cost at least ₹100."})
         return attrs                                      # MUST return attrs
 
-
-# ---------- Exercise ----------
-
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = ["id", "name", "slug", "description"]         # name + slug get unique checks automatically
 
 class RestockSerializer(serializers.Serializer):     # not tied to a model, just checks input
     amount = serializers.IntegerField(min_value=1)   # must be a whole number, 1 or more
