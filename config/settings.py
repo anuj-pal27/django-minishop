@@ -131,3 +131,18 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
+
+# ---------- Django REST Framework + JWT (1C-1) ----------
+from datetime import timedelta  # noqa: E402
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [                               # how DRF finds out "who is calling"
+        "rest_framework_simplejwt.authentication.JWTAuthentication",  # reads "Authorization: Bearer <token>"
+        "rest_framework.authentication.SessionAuthentication",        # keeps browsable API login working
+    ],
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),   # short: limits damage if stolen
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),      # long: user stays logged in for a week
+}

@@ -19,6 +19,7 @@ from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', include('users.urls')),    # auth: register, login (JWT), me
     path('', include('catalog.urls')),  # all other URLs go to catalog/urls.py
     path('', include('orders.urls')),   # orders API
 ]
