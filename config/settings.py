@@ -140,6 +140,9 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",  # reads "Authorization: Bearer <token>"
         "rest_framework.authentication.SessionAuthentication",        # keeps browsable API login working
     ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",  # every API needs login unless a view says otherwise
+    ],
 }
 
 SIMPLE_JWT = {

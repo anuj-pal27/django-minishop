@@ -3,18 +3,22 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from users.permissions import IsStaffOrReadOnly
+
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductListSerializer, ProductSerializer, RestockSerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):         # ModelViewSet = list+create+get+update+delete
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    permission_classes = [IsStaffOrReadOnly]           # anyone reads, only staff writes
     lookup_field = "slug"                             # /categories/shoes/ instead of /categories/1/
     # ↑ that's your 1B-2 exercise, done in 3 lines
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(is_active=True).select_related("category")
     serializer_class = ProductSerializer
+    permission_classes = [IsStaffOrReadOnly]           # restock is a POST, so staff only too
     lookup_field = "slug"
 
     def get_serializer_class(self):                   # pick a serializer per action
