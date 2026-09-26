@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import json_views, views
 
 app_name = "catalog"                              # lets us write "catalog:product-list"
 
@@ -13,4 +13,7 @@ urlpatterns = [
     path("products/", views.ProductListView.as_view(), name="product-list"),
     path("products/<slug:slug>/", views.ProductDetailView.as_view(), name="product-detail"),
     path("categories/<slug:slug>/", views.CategoryProductListView.as_view(), name="category-products"),
+    # plain JSON API (by hand, before DRF)
+    path("api/raw/products/", json_views.products_api, name="raw-products"),
+    path("api/raw/products/<slug:slug>/", json_views.product_detail_api, name="raw-product-detail"),
 ]
