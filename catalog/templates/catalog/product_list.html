@@ -1,0 +1,13 @@
+<h1>{% if category %}{{ category.name }}{% else %}Products{% endif %}</h1>
+<ul>
+  {% for p in products %}
+    <li>
+      <a href="{% url 'catalog:product-detail' p.slug %}">{{ p.name }}</a>
+      — ₹{{ p.price }}
+      (<a href="{% url 'catalog:category-products' p.category.slug %}">{{ p.category.name }}</a>)
+    </li>
+  {% empty %}
+    <li>No products yet.</li>
+  {% endfor %}
+</ul>
+{% if category %}<a href="{% url 'catalog:product-list' %}">← All products</a>{% endif %}
