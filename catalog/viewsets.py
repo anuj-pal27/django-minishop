@@ -7,11 +7,13 @@ from users.permissions import IsStaffOrReadOnly
 
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductListSerializer, ProductSerializer, RestockSerializer
+from config.pagination import StandardLimitOffsetPagination
 
 class CategoryViewSet(viewsets.ModelViewSet):         # ModelViewSet = list+create+get+update+delete
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [IsStaffOrReadOnly]           # anyone reads, only staff writes
+    pagination_class = StandardLimitOffsetPagination
     lookup_field = "slug"                             # /categories/shoes/ instead of /categories/1/
     # ↑ that's your 1B-2 exercise, done in 3 lines
 
@@ -42,5 +44,6 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="out-of-stock")  # detail=False → no slug
     def out_of_stock(self, request):
         products = self.get_queryset().filter(stock=0)
+        page = self.paginate_queryset(products)  #cut out the current page
         serializer = self.get_serializer(products, many=True)
-        return Response(serializer.data)
+        return self.get_paginated_response(serializer.data)   # adds count/next/previous

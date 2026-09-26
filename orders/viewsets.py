@@ -5,11 +5,13 @@ from users.permissions import IsOwnerOrStaff
 from .models import Order
 from .serializers import OrderSerializer
 
+from config.pagination import OrderCursorPagination
 
 class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrStaff]  # ALL must pass
-
+    pagination_class = OrderCursorPagination
+    
     def get_queryset(self):                                   # replaces "queryset = ..."
         qs = Order.objects.select_related("user").prefetch_related("items__product")
         if self.request.user.is_staff:

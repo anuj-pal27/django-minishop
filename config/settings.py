@@ -143,6 +143,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",  # every API needs login unless a view says otherwise
     ],
+        "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardPagination",   # every list is paged now
 }
 
 SIMPLE_JWT = {
