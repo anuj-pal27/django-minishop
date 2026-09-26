@@ -1,8 +1,13 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter            # new
 
-from . import json_views, views, api_views
+from . import json_views, views, api_views, viewsets
 
 app_name = "catalog"                              # lets us write "catalog:product-list"
+
+router = DefaultRouter()                                     # creates URLs from ViewSets
+router.register("categories", viewsets.CategoryViewSet, basename="v1-category")
+router.register("products", viewsets.ProductViewSet, basename="v1-product")
 
 urlpatterns = [
     # function-based
@@ -25,4 +30,5 @@ urlpatterns = [
     path("api/products/", api_views.ProductListCreateView.as_view(), name="api-products"),
     path("api/products/<slug:slug>/", api_views.ProductDetailView.as_view(), name="api-product-detail"),
 
+    path("api/v1/", include(router.urls)),                   # all router URLs under /api/v1/
 ]

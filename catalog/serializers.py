@@ -46,3 +46,6 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "slug", "description"]         # name + slug get unique checks automatically
+
+class RestockSerializer(serializers.Serializer):     # not tied to a model, just checks input
+    amount = serializers.IntegerField(min_value=1)   # must be a whole number, 1 or more
