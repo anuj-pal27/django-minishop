@@ -1,0 +1,52 @@
+{
+  "family": "minishop",
+  "requiresCompatibilities": ["EC2"],
+  "networkMode": "bridge",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "<ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/minishop:latest",
+      "essential": true,
+      "memory": 400,
+      "portMappings": [
+        { "containerPort": 8000, "hostPort": 8000, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "DJANGO_DEBUG", "value": "False" },
+        { "name": "DJANGO_ALLOWED_HOSTS", "value": "<EC2_PUBLIC_IP>" },
+        { "name": "POSTGRES_DB", "value": "minishop" },
+        { "name": "POSTGRES_USER", "value": "<RDS_MASTER_USERNAME>" },
+        { "name": "DB_HOST", "value": "<RDS_ENDPOINT>" },
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_SSLMODE", "value": "require" },
+
+        { "name": "GUNICORN_WORKERS", "value": "2" },
+        { "name": "GUNICORN_THREADS", "value": "1" },
+        { "name": "DB_CONN_MAX_AGE", "value": "0" },
+        { "name": "DB_POOL", "value": "False" },
+        { "name": "DB_POOL_MAX", "value": "4" },
+        { "name": "DISABLE_THROTTLE", "value": "False" }
+      ],
+      "secrets": [
+        { "name": "DJANGO_SECRET_KEY", "valueFrom": "arn:aws:ssm:ap-south-1:<ACCOUNT_ID>:parameter/minishop/DJANGO_SECRET_KEY" },
+        { "name": "POSTGRES_PASSWORD", "valueFrom": "arn:aws:ssm:ap-south-1:<ACCOUNT_ID>:parameter/minishop/POSTGRES_PASSWORD" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/')\" || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/minishop",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "web"
+        }
+      }
+    }
+  ]
+}

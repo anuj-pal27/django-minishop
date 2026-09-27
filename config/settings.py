@@ -24,10 +24,10 @@ load_dotenv(BASE_DIR / ".env")
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = os.environ.get("DJANGO_DEBUG","False") == "True"
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
-# SECURITY WARNING: don't run with debug turned on in production!
-
+# Comma-separated list from the environment, e.g. "13.233.10.20,my-alb-123.ap-south-1.elb.amazonaws.com"
+# ("*" allows any host: OK only for a quick test on AWS, not for real production)
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 
 # Application definition
@@ -47,7 +47,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'config.health.HealthCheckMiddleware',  # FIRST: answers /health/ before the ALLOWED_HOSTS check
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # serves admin/DRF CSS+JS inside the container
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -85,10 +87,25 @@ DATABASES = {
         'NAME': os.environ["POSTGRES_DB"],
         'USER': os.environ["POSTGRES_USER"],
         'PASSWORD': os.environ["POSTGRES_PASSWORD"],
-        'HOST': os.environ.get("DB_HOST", "localhost"),
+        'HOST': os.environ.get("DB_HOST", "localhost"),     # on AWS: the RDS endpoint
         'PORT': os.environ.get("DB_PORT", "5432"),
+        # Phase 6 experiments: change these with env vars, no code change needed
+        'CONN_MAX_AGE': int(os.environ.get("DB_CONN_MAX_AGE", "0")),   # 0 = new connection per request
+        'CONN_HEALTH_CHECKS': True,                         # test a reused connection before using it
+        'OPTIONS': {
+            # RDS Postgres 15+ forces SSL by default -> "require" on AWS, "prefer" locally
+            'sslmode': os.environ.get("DB_SSLMODE", "prefer"),
+        },
     }
 }
+
+if os.environ.get("DB_POOL", "False") == "True":           # 6-3: Django's built-in pool (psycopg 3)
+    DATABASES["default"]["CONN_MAX_AGE"] = 0               # the pool refuses persistent connections
+    DATABASES["default"]["OPTIONS"]["pool"] = {
+        "min_size": int(os.environ.get("DB_POOL_MIN", "2")),   # kept open and ready
+        "max_size": int(os.environ.get("DB_POOL_MAX", "4")),   # PER gunicorn worker process!
+        "timeout": int(os.environ.get("DB_POOL_TIMEOUT", "10")),  # seconds to wait for a free connection
+    }
 
 
 # Password validation
@@ -126,6 +143,19 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"          # collectstatic copies files here (done in the Dockerfile)
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
+
+# Logs go to stdout -> ECS sends them to CloudWatch
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -161,3 +191,7 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),   # short: limits damage if stolen
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),      # long: user stays logged in for a week
 }
+
+# Load tests only (Phase 6): the throttle would turn most test requests into 429 errors
+if os.environ.get("DISABLE_THROTTLE") == "True":
+    REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = []
