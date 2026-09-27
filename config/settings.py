@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',  # Django REST Framework
-    'django-filters'
+    'django_filters',  # django-filter (1C-4)
     'users',
     'catalog',
     'orders',
@@ -144,7 +144,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",  # every API needs login unless a view says otherwise
     ],
-        "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardPagination",   # every list is paged now
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardPagination",   # every list is paged now
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",   # limits by IP when not logged in
+        "rest_framework.throttling.UserRateThrottle",   # limits by user id when logged in
+    ],
+    "DEFAULT_THROTTLE_RATES": {                         # format: number/second|minute|hour|day
+        "anon": "20/minute",
+        "user": "60/minute",
+        "login": "5/minute",                            # used by LoginView (stops password guessing)
+        "restock": "10/hour",                           # used by the restock action (1C-5 exercise)
+    },
 }
 
 SIMPLE_JWT = {

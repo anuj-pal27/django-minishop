@@ -2,6 +2,7 @@ from django.db.models import F
 from rest_framework import viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from .filters import ProductFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from users.permissions import IsStaffOrReadOnly
@@ -33,6 +34,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action == "list":                     # GET /products/ -> short version
             return ProductListSerializer
         return ProductSerializer                      # everything else -> full version
+
+    def get_throttles(self):                          # pick limiters per action (1C-5 exercise)
+        if self.action == "restock":
+            self.throttle_scope = "restock"           # uses the "restock" rate: 10/hour
+            return [ScopedRateThrottle()]
+        return super().get_throttles()                # other actions: normal anon/user limits
 
     # ----- custom action on ONE product: POST /products/<slug>/restock/ -----
     @action(detail=True, methods=["post"])            # detail=True → needs a slug in the URL

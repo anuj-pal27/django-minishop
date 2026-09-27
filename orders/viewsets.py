@@ -1,3 +1,4 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, viewsets
 
 from users.permissions import IsOwnerOrStaff
@@ -11,6 +12,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrStaff]  # ALL must pass
     pagination_class = OrderCursorPagination
+    filter_backends = [DjangoFilterBackend]           # turn filtering on (1C-4 exercise)
+    filterset_fields = ["status"]                     # allow ?status=pending
     
     def get_queryset(self):                                   # replaces "queryset = ..."
         qs = Order.objects.select_related("user").prefetch_related("items__product")
