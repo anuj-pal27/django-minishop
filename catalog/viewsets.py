@@ -1,8 +1,9 @@
 from django.db.models import F
-from rest_framework import viewsets
+from rest_framework import viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from .filters import ProductFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from users.permissions import IsStaffOrReadOnly
 
 from .models import Category, Product
@@ -21,6 +22,11 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(is_active=True).select_related("category")
     serializer_class = ProductSerializer
     permission_classes = [IsStaffOrReadOnly]           # restock is a POST, so staff only too
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = ProductFilter
+    search_fields = ["name","description","category__name"]
+    ordering_fields = ["price", "name", "created_at", "stock"]
+    ordeing = ["-created_at"]
     lookup_field = "slug"
 
     def get_serializer_class(self):                   # pick a serializer per action
