@@ -1,13 +1,17 @@
 """1C-6 tests for orders: auth, own-orders-only, staff, totals, filter, read-only (7 tests)."""
+import threading
 from decimal import Decimal
 
 from django.core.cache import cache
+from django.db import connection
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from config.factories import make_order, make_product, make_staff, make_user
 from orders.models import Order
+from orders.services import CannotCancel, OutOfStock, ProductUnavailable, cancel_order, place_order
 
 LIST_URL = reverse("orders:v1-order-list")          # /api/v1/orders/
 
@@ -104,3 +108,85 @@ class OrderQueryCountTests(APITestCase):
         order = self.alice.orders.first()
         with self.assertNumQueries(3):
             self.client.get(detail_url(order))
+
+
+class PlaceOrderTests(TestCase):
+    """1D-2: place_order / cancel_order service functions (logic, rollback)."""
+
+    def setUp(self):
+        self.alice = make_user()
+        self.pen = make_product(price=Decimal("10.00"), stock=5)
+        self.book = make_product(price=Decimal("200.00"), stock=1)
+
+    def test_place_order_creates_items_and_takes_stock(self):
+        order = place_order(self.alice, [(self.pen.pk, 2), (self.book.pk, 1)])
+
+        self.assertEqual(order.items.count(), 2)
+        self.pen.refresh_from_db()
+        self.book.refresh_from_db()
+        self.assertEqual((self.pen.stock, self.book.stock), (3, 0))
+
+    def test_out_of_stock_rolls_back_everything(self):
+        with self.assertRaises(OutOfStock):
+            place_order(self.alice, [(self.pen.pk, 2), (self.book.pk, 5)])   # pen OK, book fails
+
+        self.assertEqual(Order.objects.count(), 0)          # the half-made order was undone
+        self.pen.refresh_from_db()
+        self.assertEqual(self.pen.stock, 5)                 # the pen's stock change was undone too
+
+    def test_inactive_product_is_rejected(self):
+        hidden = make_product(is_active=False)
+        with self.assertRaises(ProductUnavailable):
+            place_order(self.alice, [(hidden.pk, 1)])
+
+    def test_cancel_puts_stock_back_once(self):
+        order = place_order(self.alice, [(self.pen.pk, 2)])
+        cancel_order(order)
+
+        order.refresh_from_db()
+        self.pen.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.pen.stock, 5)                 # 5 - 2 + 2
+        with self.assertRaises(CannotCancel):               # second cancel must not add stock again
+            cancel_order(order)
+
+    def test_shipped_order_cannot_be_cancelled(self):
+        order = place_order(self.alice, [(self.pen.pk, 1)])
+        Order.objects.filter(pk=order.pk).update(status=Order.Status.SHIPPED)
+        with self.assertRaises(CannotCancel):
+            cancel_order(order)
+
+
+class PlaceOrderRaceTests(TransactionTestCase):
+    """1D-2: two buyers, one last item, REAL concurrency.
+
+    TransactionTestCase (not TestCase): each thread gets its own DB connection and real commits,
+    so row locks actually happen. TestCase wraps everything in one transaction, so no race is possible.
+    """
+
+    def test_two_buyers_race_for_the_last_item(self):
+        product = make_product(stock=1)
+        buyers = [make_user(), make_user()]
+        barrier = threading.Barrier(2)                       # both threads start buying at the same moment
+        results = []
+
+        def buy(user):
+            try:
+                barrier.wait()
+                place_order(user, [(product.pk, 1)])
+                results.append("ok")
+            except OutOfStock:
+                results.append("out_of_stock")
+            finally:
+                connection.close()                           # each thread opened its own connection: close it
+
+        threads = [threading.Thread(target=buy, args=(u,)) for u in buyers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        product.refresh_from_db()
+        self.assertEqual(sorted(results), ["ok", "out_of_stock"])  # exactly ONE buyer wins
+        self.assertEqual(product.stock, 0)                          # never -1
+        self.assertEqual(Order.objects.count(), 1)                  # the loser's order was rolled back
