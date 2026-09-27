@@ -27,7 +27,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     filterset_class = ProductFilter
     search_fields = ["name","description","category__name"]
     ordering_fields = ["price", "name", "created_at", "stock"]
-    ordeing = ["-created_at"]
+    ordering = ["-created_at"]                       # default order (1C-6: typo "ordeing" fixed)
     lookup_field = "slug"
 
     def get_serializer_class(self):                   # pick a serializer per action
@@ -58,5 +58,5 @@ class ProductViewSet(viewsets.ModelViewSet):
     def out_of_stock(self, request):
         products = self.get_queryset().filter(stock=0)
         page = self.paginate_queryset(products)  #cut out the current page
-        serializer = self.get_serializer(products, many=True)
+        serializer = self.get_serializer(page, many=True)  # 1C-6 fix: serialize the PAGE, not all rows
         return self.get_paginated_response(serializer.data)   # adds count/next/previous

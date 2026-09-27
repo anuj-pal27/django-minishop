@@ -1,3 +1,69 @@
-from django.test import TestCase
+"""1C-6 tests for orders: auth, own-orders-only, staff, totals, filter, read-only (7 tests)."""
+from decimal import Decimal
 
-# Create your tests here.
+from django.core.cache import cache
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from config.factories import make_order, make_product, make_staff, make_user
+from orders.models import Order
+
+LIST_URL = reverse("orders:v1-order-list")          # /api/v1/orders/
+
+
+def detail_url(order):
+    return reverse("orders:v1-order-detail", args=[order.pk])
+
+
+class OrderTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.alice, self.bob = make_user(), make_user()
+        self.alice_order = make_order(self.alice)
+        self.bob_order = make_order(self.bob)
+
+    def ids(self, res):                              # small helper: order ids in a list response
+        return {o["id"] for o in res.data["results"]}
+
+    def test_anonymous_gets_401(self):
+        self.assertEqual(self.client.get(LIST_URL).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_customer_lists_only_own_orders(self):
+        self.client.force_authenticate(self.alice)
+        res = self.client.get(LIST_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.ids(res), {self.alice_order.id})    # Bob's order is not there
+
+    def test_customer_gets_404_for_someone_elses_order(self):
+        self.client.force_authenticate(self.alice)
+        res = self.client.get(detail_url(self.bob_order))
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)  # 404, not 403: don't leak that it exists
+
+    def test_staff_sees_every_order(self):
+        self.client.force_authenticate(make_staff())
+        res = self.client.get(LIST_URL)
+        self.assertEqual(self.ids(res), {self.alice_order.id, self.bob_order.id})
+
+    def test_total_and_item_count(self):
+        pen = make_product(price=Decimal("10.50"))
+        book = make_product(price=Decimal("200.00"))
+        order = make_order(self.alice, items=[(pen, 2), (book, 1)])   # 2 x 10.50 + 1 x 200 = 221.00
+
+        self.client.force_authenticate(self.alice)
+        res = self.client.get(detail_url(order))
+
+        self.assertEqual(res.data["item_count"], 2)
+        self.assertEqual(Decimal(res.data["total"]), Decimal("221.00"))  # compare as Decimal, not float
+
+    def test_filter_by_status(self):
+        paid = make_order(self.alice, status=Order.Status.PAID)
+        self.client.force_authenticate(self.alice)
+        res = self.client.get(LIST_URL, {"status": "paid"})
+        self.assertEqual(self.ids(res), {paid.id})                   # the pending order is filtered out
+
+    def test_orders_api_is_read_only(self):
+        self.client.force_authenticate(self.alice)
+        res = self.client.post(LIST_URL, {})
+        self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)  # ReadOnlyModelViewSet: no POST
