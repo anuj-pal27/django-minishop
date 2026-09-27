@@ -94,3 +94,25 @@ class ProductBehaviourTests(APITestCase):
 
         self.assertEqual(res.data["count"], 12)                  # all 12 counted...
         self.assertEqual(len(res.data["results"]), 10)           # ...but only one page (page_size=10) sent
+
+
+class ProductQueryCountTests(APITestCase):
+    """1D-1: product and category lists must use a fixed number of queries (no N+1)."""
+
+    def setUp(self):
+        cache.clear()
+
+    def test_product_list_uses_2_queries(self):
+        for _ in range(15):                              # 15 products in 15 different categories
+            make_product()
+        # 1 = COUNT(*) for pagination ("count": 15)
+        # 2 = the page of products + their category (select_related JOIN)
+        with self.assertNumQueries(2):
+            res = self.client.get(LIST_URL)
+        self.assertEqual(len(res.data["results"]), 10)   # one page
+
+    def test_category_list_uses_2_queries(self):
+        for _ in range(5):
+            make_category()
+        with self.assertNumQueries(2):                   # COUNT(*) + one page of categories
+            self.client.get(reverse("catalog:v1-category-list"))

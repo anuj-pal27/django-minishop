@@ -67,3 +67,40 @@ class OrderTests(APITestCase):
         self.client.force_authenticate(self.alice)
         res = self.client.post(LIST_URL, {})
         self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)  # ReadOnlyModelViewSet: no POST
+
+
+class OrderQueryCountTests(APITestCase):
+    """1D-1: the number of SQL queries must NOT grow with the number of orders (no N+1)."""
+
+    def setUp(self):
+        cache.clear()
+        self.alice = make_user()
+        self.client.force_authenticate(self.alice)      # force_authenticate: no extra "load user" query
+
+    def make_orders(self, how_many):
+        for _ in range(how_many):                        # each order has 2 items with 2 different products
+            make_order(self.alice, items=[(make_product(), 2), (make_product(), 1)])
+
+    def test_order_list_uses_3_queries(self):
+        self.make_orders(5)
+        # 1 = orders + users (select_related JOIN)
+        # 2 = all items of those orders          (prefetch_related "items")
+        # 3 = all products of those items        (prefetch_related "items__product")
+        with self.assertNumQueries(3):                   # fails and prints the SQL if the count is different
+            res = self.client.get(LIST_URL)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_query_count_does_not_grow_with_more_orders(self):
+        self.make_orders(1)
+        with self.assertNumQueries(3):
+            self.client.get(LIST_URL)
+
+        self.make_orders(9)                              # now 10 orders, 20 items
+        with self.assertNumQueries(3):                   # still 3: this is the real N+1 check
+            self.client.get(LIST_URL)
+
+    def test_order_detail_uses_3_queries(self):
+        self.make_orders(1)
+        order = self.alice.orders.first()
+        with self.assertNumQueries(3):
+            self.client.get(detail_url(order))
