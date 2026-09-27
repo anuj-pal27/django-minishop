@@ -2,6 +2,7 @@ import django_filters
 from .models import Product
 
 class ProductFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     category = django_filters.CharFilter(field_name="category__slug")      # ?category=shoes
     min_price = django_filters.NumberFilter(field_name="price", lookup_expr="gte")  # price >= X
     max_price = django_filters.NumberFilter(field_name="price", lookup_expr="lte")  # price <= X
@@ -9,7 +10,7 @@ class ProductFilter(django_filters.FilterSet):
 
     class Meta:
         model = Product
-        fields = ["category", "min_price", "max_price", "in_stock"]
+        fields = ["category", "min_price", "max_price", "in_stock", "name"]
 
     def filter_in_stock(self, queryset, name, value):   # value = True or False from the URL
         if value:
